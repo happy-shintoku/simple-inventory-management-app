@@ -7,6 +7,16 @@
   margin-bottom: 1.5rem;
 }
 
+.view-tabs {
+  display: flex;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.view-tabs button {
+  margin: 0;
+}
+
 .message {
   margin-bottom: 1rem;
   border-left: 0.35rem solid;
@@ -42,6 +52,23 @@
   justify-content: space-between;
   align-items: baseline;
   gap: 1rem;
+}
+
+.history-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.history-actions {
+  display: flex;
+  gap: 0.65rem;
+  margin-bottom: 0.8rem;
+}
+
+.history-actions button {
+  margin: 0;
 }
 
 .refresh-button {
@@ -84,10 +111,39 @@
   background: #fff1f0;
 }
 
+.log-inbound {
+  color: #1f6f2f;
+}
+
+.log-outbound {
+  color: #b83c32;
+}
+
 @media (max-width: 768px) {
+  .view-tabs {
+    flex-direction: column;
+  }
+
+  .view-tabs button {
+    width: 100%;
+  }
+
   .inventory-title {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .history-title {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .history-actions {
+    flex-direction: column;
+  }
+
+  .history-actions button {
+    width: 100%;
   }
 
   .button-row {
