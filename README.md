@@ -75,6 +75,15 @@
     pip install fastapi uvicorn sqlmodel
     uvicorn app:app --reload
 
+実装済みのバックエンドAPI（商品CRUD）は以下です。
+
+- `GET /health` : ヘルスチェック
+- `POST /products` : 商品作成
+- `GET /products` : 商品一覧取得（`offset`/`limit`対応）
+- `GET /products/{product_id}` : 商品詳細取得
+- `PATCH /products/{product_id}` : 商品情報更新（部分更新）
+- `DELETE /products/{product_id}` : 商品削除
+
 ### フロントエンドの起動 (Port: 5173 など)
 
     cd frontend
