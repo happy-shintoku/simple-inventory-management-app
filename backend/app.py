@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 
 from database import create_db_and_tables, get_session
-from models import Product, ProductCreate, ProductRead, ProductUpdate
+from models import Product, ProductCreate, ProductRead, ProductUpdate, StockLog
 
 
 @asynccontextmanager
@@ -41,6 +41,14 @@ def create_product(payload: ProductCreate, session: SessionDep) -> Product:
     session.add(product)
     session.commit()
     session.refresh(product)
+
+    stock_log = StockLog(
+        product_id=product.id,
+        change_quantity=product.stock_quantity,
+        action_type="新規登録",
+    )
+    session.add(stock_log)
+    session.commit()
     return product
 
 
@@ -69,6 +77,7 @@ def update_product(product_id: int, payload: ProductUpdate, session: SessionDep)
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
+    previous_stock = product.stock_quantity
     update_data = payload.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(product, key, value)
@@ -76,7 +85,31 @@ def update_product(product_id: int, payload: ProductUpdate, session: SessionDep)
     session.add(product)
     session.commit()
     session.refresh(product)
+
+    if "stock_quantity" in update_data:
+        change_quantity = product.stock_quantity - previous_stock
+        if change_quantity != 0:
+            action_type = "入庫" if change_quantity > 0 else "出庫"
+            stock_log = StockLog(
+                product_id=product.id,
+                change_quantity=change_quantity,
+                action_type=action_type,
+            )
+            session.add(stock_log)
+            session.commit()
+
     return product
+
+
+@app.get("/logs", response_model=list[StockLog])
+def list_logs(
+    session: SessionDep,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> list[StockLog]:
+    statement = select(StockLog).order_by(StockLog.timestamp.desc()).offset(offset).limit(limit)
+    logs = session.exec(statement).all()
+    return logs
 
 
 @app.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
