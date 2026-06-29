@@ -1,0 +1,71 @@
+.app-shell {
+  padding-top: 2rem;
+  padding-bottom: 3rem;
+}
+
+.page-header {
+  margin-bottom: 1.5rem;
+}
+
+.message {
+  margin-bottom: 1rem;
+  border-left: 0.35rem solid;
+}
+
+.message.success {
+  border-left-color: #2a7d34;
+}
+
+.message.error {
+  border-left-color: #b83c32;
+}
+
+.register-form {
+  margin-bottom: 1.25rem;
+}
+
+.form-grid {
+  align-items: end;
+}
+
+.inventory-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.refresh-button {
+  margin-bottom: 0.8rem;
+}
+
+.button-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.button-row button {
+  margin: 0;
+  padding-inline: 0.75rem;
+}
+
+.low-stock {
+  color: #b83c32;
+}
+
+@media (max-width: 768px) {
+  .inventory-title {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .button-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .button-row button {
+    width: 100%;
+  }
+}
