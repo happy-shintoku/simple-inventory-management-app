@@ -27,13 +27,53 @@ const initialForm = {
   threshold: 5,
 }
 
+function formatTimestamp(value) {
+  return new Date(value).toLocaleString('ja-JP', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+function formatSignedQuantity(value) {
+  return value > 0 ? `+${value}` : `${value}`
+}
+
+function escapeCsvValue(value) {
+  const normalized = String(value ?? '').replaceAll('"', '""')
+  return `"${normalized}"`
+}
+
+function createLogsCsv(logs, productNameById) {
+  const header = ['履歴ID', '日時', '商品ID', '商品名', '操作', '増減数']
+  const rows = logs.map((log) => [
+    log.id,
+    formatTimestamp(log.timestamp),
+    log.product_id,
+    productNameById[log.product_id] ?? `商品ID:${log.product_id}`,
+    log.action_type,
+    formatSignedQuantity(log.change_quantity),
+  ])
+
+  return [header, ...rows]
+    .map((row) => row.map((cell) => escapeCsvValue(cell)).join(','))
+    .join('\n')
+}
+
 function App() {
+  const [activeView, setActiveView] = useState('inventory')
   const [products, setProducts] = useState([])
+  const [logs, setLogs] = useState([])
   const [form, setForm] = useState(initialForm)
   const [stockInputs, setStockInputs] = useState({})
   const [thresholdInputs, setThresholdInputs] = useState({})
   const [loading, setLoading] = useState(false)
+  const [logsLoading, setLogsLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -44,6 +84,11 @@ function App() {
 
   const lowStockProducts = useMemo(
     () => products.filter((product) => product.stock_quantity <= product.threshold),
+    [products],
+  )
+
+  const productNameById = useMemo(
+    () => Object.fromEntries(products.map((product) => [product.id, product.name])),
     [products],
   )
 
@@ -75,8 +120,28 @@ function App() {
     }
   }
 
+  async function fetchLogs() {
+    setLogsLoading(true)
+    setError('')
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/logs?limit=500`)
+      if (!response.ok) {
+        throw new Error('履歴一覧の取得に失敗しました')
+      }
+
+      const data = await response.json()
+      setLogs(data)
+    } catch (fetchError) {
+      setError(fetchError.message)
+    } finally {
+      setLogsLoading(false)
+    }
+  }
+
   useEffect(() => {
     fetchProducts()
+    fetchLogs()
   }, [])
 
   function onChangeForm(event) {
@@ -112,6 +177,7 @@ function App() {
       setForm(initialForm)
       setMessage('商品を登録しました')
       await fetchProducts()
+      await fetchLogs()
     } catch (submitError) {
       setError(submitError.message)
     } finally {
@@ -152,6 +218,7 @@ function App() {
           : `${product.name} を ${delta} 個出庫しました`,
       )
       await fetchProducts()
+      await fetchLogs()
     } catch (updateError) {
       setError(updateError.message)
     }
@@ -185,6 +252,40 @@ function App() {
     }
   }
 
+  function exportLogsCsv() {
+    if (logs.length === 0) {
+      setError('CSV出力する履歴がありません')
+      return
+    }
+
+    setExporting(true)
+    setMessage('')
+    setError('')
+
+    try {
+      const csv = createLogsCsv(logs, productNameById)
+      const bom = '\uFEFF'
+      const blob = new Blob([`${bom}${csv}`], {
+        type: 'text/csv;charset=utf-8;',
+      })
+
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `stock-logs-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
+      setMessage(`履歴CSVを出力しました (${logs.length}件)`)
+    } catch {
+      setError('CSV出力に失敗しました')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <main className="container app-shell">
       <header className="page-header">
@@ -194,7 +295,24 @@ function App() {
         </p>
       </header>
 
-      {lowStockProducts.length > 0 ? (
+      <nav className="view-tabs" aria-label="ページ切り替え">
+        <button
+          type="button"
+          onClick={() => setActiveView('inventory')}
+          className={activeView === 'inventory' ? '' : 'secondary'}
+        >
+          在庫管理
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveView('history')}
+          className={activeView === 'history' ? '' : 'secondary'}
+        >
+          履歴一覧
+        </button>
+      </nav>
+
+      {activeView === 'inventory' && lowStockProducts.length > 0 ? (
         <article className="message warning low-stock-alert">
           ⚠️ 在庫が不足している商品が {lowStockProducts.length} 件あります
         </article>
@@ -203,179 +321,237 @@ function App() {
       {message ? <article className="message success">{message}</article> : null}
       {error ? <article className="message error">{error}</article> : null}
 
-      <section>
-        <h2>商品登録</h2>
-        <form onSubmit={onSubmitProduct} className="register-form">
-          <div className="grid form-grid">
-            <label>
-              商品名
-              <input
-                name="name"
-                value={form.name}
-                onChange={onChangeForm}
-                required
-                minLength={1}
-              />
-            </label>
+      {activeView === 'inventory' ? (
+        <>
+          <section>
+            <h2>商品登録</h2>
+            <form onSubmit={onSubmitProduct} className="register-form">
+              <div className="grid form-grid">
+                <label>
+                  商品名
+                  <input
+                    name="name"
+                    value={form.name}
+                    onChange={onChangeForm}
+                    required
+                    minLength={1}
+                  />
+                </label>
 
-            <label>
-              カテゴリー
-              <input
-                name="category"
-                value={form.category}
-                onChange={onChangeForm}
-                required
-                minLength={1}
-              />
-            </label>
+                <label>
+                  カテゴリー
+                  <input
+                    name="category"
+                    value={form.category}
+                    onChange={onChangeForm}
+                    required
+                    minLength={1}
+                  />
+                </label>
 
-            <label>
-              単価
-              <input
-                type="number"
-                name="price"
-                value={form.price}
-                onChange={onChangeForm}
-                min={0}
-                required
-              />
-            </label>
+                <label>
+                  単価
+                  <input
+                    type="number"
+                    name="price"
+                    value={form.price}
+                    onChange={onChangeForm}
+                    min={0}
+                    required
+                  />
+                </label>
 
-            <label>
-              初期在庫
-              <input
-                type="number"
-                name="stock_quantity"
-                value={form.stock_quantity}
-                onChange={onChangeForm}
-                min={0}
-                required
-              />
-            </label>
+                <label>
+                  初期在庫
+                  <input
+                    type="number"
+                    name="stock_quantity"
+                    value={form.stock_quantity}
+                    onChange={onChangeForm}
+                    min={0}
+                    required
+                  />
+                </label>
 
-            <label>
-              しきい値
-              <input
-                type="number"
-                name="threshold"
-                value={form.threshold}
-                onChange={onChangeForm}
-                min={0}
-                required
-              />
-            </label>
+                <label>
+                  しきい値
+                  <input
+                    type="number"
+                    name="threshold"
+                    value={form.threshold}
+                    onChange={onChangeForm}
+                    min={0}
+                    required
+                  />
+                </label>
+              </div>
+
+              <button type="submit" aria-busy={submitting} disabled={submitting}>
+                {submitting ? '登録中...' : '商品を登録'}
+              </button>
+            </form>
+          </section>
+
+          <section>
+            <div className="inventory-title">
+              <h2>在庫増減</h2>
+              <small>
+                商品数: {products.length} / 合計在庫: {totalStock}
+              </small>
+            </div>
+
+            <button type="button" className="secondary refresh-button" onClick={fetchProducts}>
+              一覧を更新
+            </button>
+
+            {loading ? <p>読み込み中...</p> : null}
+
+            {!loading && products.length === 0 ? (
+              <article>登録された商品がありません。まず商品登録を行ってください。</article>
+            ) : null}
+
+            {!loading && products.length > 0 ? (
+              <figure>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>商品名</th>
+                      <th>カテゴリー</th>
+                      <th>単価</th>
+                      <th>在庫</th>
+                      <th>しきい値</th>
+                      <th>増減数</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {products.map((product) => {
+                      const isLowStock = product.stock_quantity <= product.threshold
+                      return (
+                        <tr key={product.id} className={isLowStock ? 'low-stock-row' : ''}>
+                          <td>{product.name}</td>
+                          <td>{product.category}</td>
+                          <td>{product.price.toLocaleString()} 円</td>
+                          <td>
+                            <strong className={isLowStock ? 'low-stock' : ''}>
+                              {product.stock_quantity}
+                            </strong>
+                          </td>
+                          <td>
+                            <div className="threshold-edit">
+                              <input
+                                type="number"
+                                min={0}
+                                value={thresholdInputs[product.id] ?? product.threshold}
+                                onChange={(event) => {
+                                  const nextValue = Number(event.target.value)
+                                  setThresholdInputs((prev) => ({
+                                    ...prev,
+                                    [product.id]: Number.isNaN(nextValue) ? 0 : nextValue,
+                                  }))
+                                }}
+                              />
+                              <button
+                                type="button"
+                                className="secondary compact"
+                                onClick={() => updateThreshold(product)}
+                              >
+                                更新
+                              </button>
+                            </div>
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              min={1}
+                              value={stockInputs[product.id] ?? 1}
+                              onChange={(event) => {
+                                const nextValue = Number(event.target.value)
+                                setStockInputs((prev) => ({
+                                  ...prev,
+                                  [product.id]: Number.isNaN(nextValue) ? 1 : nextValue,
+                                }))
+                              }}
+                            />
+                          </td>
+                          <td>
+                            <div className="button-row">
+                              <button type="button" onClick={() => updateStock(product, 'increase')}>
+                                入庫 +
+                              </button>
+                              <button
+                                type="button"
+                                className="contrast"
+                                onClick={() => updateStock(product, 'decrease')}
+                              >
+                                出庫 -
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </figure>
+            ) : null}
+          </section>
+        </>
+      ) : (
+        <section>
+          <div className="history-title">
+            <h2>履歴一覧</h2>
+            <small>件数: {logs.length}</small>
           </div>
 
-          <button type="submit" aria-busy={submitting} disabled={submitting}>
-            {submitting ? '登録中...' : '商品を登録'}
-          </button>
-        </form>
-      </section>
+          <div className="history-actions">
+            <button type="button" className="secondary" onClick={fetchLogs}>
+              履歴を更新
+            </button>
+            <button
+              type="button"
+              onClick={exportLogsCsv}
+              aria-busy={exporting}
+              disabled={exporting || logs.length === 0}
+            >
+              {exporting ? 'CSV作成中...' : 'CSVエクスポート'}
+            </button>
+          </div>
 
-      <section>
-        <div className="inventory-title">
-          <h2>在庫増減</h2>
-          <small>
-            商品数: {products.length} / 合計在庫: {totalStock}
-          </small>
-        </div>
+          {logsLoading ? <p>読み込み中...</p> : null}
 
-        <button type="button" className="secondary refresh-button" onClick={fetchProducts}>
-          一覧を更新
-        </button>
+          {!logsLoading && logs.length === 0 ? <article>表示できる履歴がありません。</article> : null}
 
-        {loading ? <p>読み込み中...</p> : null}
-
-        {!loading && products.length === 0 ? (
-          <article>登録された商品がありません。まず商品登録を行ってください。</article>
-        ) : null}
-
-        {!loading && products.length > 0 ? (
-          <figure>
-            <table>
-              <thead>
-                <tr>
-                  <th>商品名</th>
-                  <th>カテゴリー</th>
-                  <th>単価</th>
-                  <th>在庫</th>
-                  <th>しきい値</th>
-                  <th>増減数</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.map((product) => {
-                  const isLowStock = product.stock_quantity <= product.threshold
-                  return (
-                    <tr key={product.id} className={isLowStock ? 'low-stock-row' : ''}>
-                      <td>{product.name}</td>
-                      <td>{product.category}</td>
-                      <td>{product.price.toLocaleString()} 円</td>
+          {!logsLoading && logs.length > 0 ? (
+            <figure>
+              <table>
+                <thead>
+                  <tr>
+                    <th>日時</th>
+                    <th>商品名</th>
+                    <th>操作</th>
+                    <th>増減数</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logs.map((log) => (
+                    <tr key={log.id}>
+                      <td>{formatTimestamp(log.timestamp)}</td>
+                      <td>{productNameById[log.product_id] ?? `商品ID:${log.product_id}`}</td>
+                      <td>{log.action_type}</td>
                       <td>
-                        <strong className={isLowStock ? 'low-stock' : ''}>
-                          {product.stock_quantity}
+                        <strong className={log.change_quantity < 0 ? 'log-outbound' : 'log-inbound'}>
+                          {formatSignedQuantity(log.change_quantity)}
                         </strong>
                       </td>
-                      <td>
-                        <div className="threshold-edit">
-                          <input
-                            type="number"
-                            min={0}
-                            value={thresholdInputs[product.id] ?? product.threshold}
-                            onChange={(event) => {
-                              const nextValue = Number(event.target.value)
-                              setThresholdInputs((prev) => ({
-                                ...prev,
-                                [product.id]: Number.isNaN(nextValue) ? 0 : nextValue,
-                              }))
-                            }}
-                          />
-                          <button
-                            type="button"
-                            className="secondary compact"
-                            onClick={() => updateThreshold(product)}
-                          >
-                            更新
-                          </button>
-                        </div>
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          min={1}
-                          value={stockInputs[product.id] ?? 1}
-                          onChange={(event) => {
-                            const nextValue = Number(event.target.value)
-                            setStockInputs((prev) => ({
-                              ...prev,
-                              [product.id]: Number.isNaN(nextValue) ? 1 : nextValue,
-                            }))
-                          }}
-                        />
-                      </td>
-                      <td>
-                        <div className="button-row">
-                          <button type="button" onClick={() => updateStock(product, 'increase')}>
-                            入庫 +
-                          </button>
-                          <button
-                            type="button"
-                            className="contrast"
-                            onClick={() => updateStock(product, 'decrease')}
-                          >
-                            出庫 -
-                          </button>
-                        </div>
-                      </td>
                     </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </figure>
-        ) : null}
-      </section>
+                  ))}
+                </tbody>
+              </table>
+            </figure>
+          ) : null}
+        </section>
+      )}
     </main>
   )
 }
