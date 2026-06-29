@@ -50,6 +50,23 @@
   padding-inline: 0.75rem;
 }
 
+.threshold-edit {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.threshold-edit input {
+  margin: 0;
+  min-width: 5.5rem;
+}
+
+.compact {
+  margin: 0;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.85rem;
+}
+
 .low-stock {
   color: #b83c32;
 }
@@ -67,5 +84,10 @@
 
   .button-row button {
     width: 100%;
+  }
+
+  .threshold-edit {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

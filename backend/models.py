@@ -21,11 +21,11 @@ class ProductCreate(ProductBase):
 
 
 class ProductUpdate(SQLModel):
-    name: Optional[str] = None
-    category: Optional[str] = None
-    price: Optional[int] = None
-    stock_quantity: Optional[int] = None
-    threshold: Optional[int] = None
+    name: Optional[str] = Field(default=None, min_length=1)
+    category: Optional[str] = Field(default=None, min_length=1)
+    price: Optional[int] = Field(default=None, ge=0)
+    stock_quantity: Optional[int] = Field(default=None, ge=0)
+    threshold: Optional[int] = Field(default=None, ge=0)
 
 
 class ProductRead(ProductBase):

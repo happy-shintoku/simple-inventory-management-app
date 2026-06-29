@@ -15,6 +15,7 @@ function App() {
   const [products, setProducts] = useState([])
   const [form, setForm] = useState(initialForm)
   const [stockInputs, setStockInputs] = useState({})
+  const [thresholdInputs, setThresholdInputs] = useState({})
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState('')
@@ -38,11 +39,14 @@ function App() {
       const data = await response.json()
       setProducts(data)
 
-      const defaults = {}
+      const stockDefaults = {}
+      const thresholdDefaults = {}
       for (const product of data) {
-        defaults[product.id] = stockInputs[product.id] ?? 1
+        stockDefaults[product.id] = stockInputs[product.id] ?? 1
+        thresholdDefaults[product.id] = thresholdInputs[product.id] ?? product.threshold
       }
-      setStockInputs(defaults)
+      setStockInputs(stockDefaults)
+      setThresholdInputs(thresholdDefaults)
     } catch (fetchError) {
       setError(fetchError.message)
     } finally {
@@ -126,6 +130,34 @@ function App() {
           ? `${product.name} を ${delta} 個入庫しました`
           : `${product.name} を ${delta} 個出庫しました`,
       )
+      await fetchProducts()
+    } catch (updateError) {
+      setError(updateError.message)
+    }
+  }
+
+  async function updateThreshold(product) {
+    setError('')
+    setMessage('')
+
+    const nextThreshold = Number(thresholdInputs[product.id])
+    if (Number.isNaN(nextThreshold) || nextThreshold < 0) {
+      setError(`しきい値は0以上で入力してください: ${product.name}`)
+      return
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/products/${product.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threshold: nextThreshold }),
+      })
+
+      if (!response.ok) {
+        throw new Error('しきい値の更新に失敗しました')
+      }
+
+      setMessage(`${product.name} のしきい値を ${nextThreshold} に更新しました`)
       await fetchProducts()
     } catch (updateError) {
       setError(updateError.message)
@@ -258,7 +290,29 @@ function App() {
                           {product.stock_quantity}
                         </strong>
                       </td>
-                      <td>{product.threshold}</td>
+                      <td>
+                        <div className="threshold-edit">
+                          <input
+                            type="number"
+                            min={0}
+                            value={thresholdInputs[product.id] ?? product.threshold}
+                            onChange={(event) => {
+                              const nextValue = Number(event.target.value)
+                              setThresholdInputs((prev) => ({
+                                ...prev,
+                                [product.id]: Number.isNaN(nextValue) ? 0 : nextValue,
+                              }))
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="secondary compact"
+                            onClick={() => updateThreshold(product)}
+                          >
+                            更新
+                          </button>
+                        </div>
+                      </td>
                       <td>
                         <input
                           type="number"
