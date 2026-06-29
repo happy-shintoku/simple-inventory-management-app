@@ -20,6 +20,15 @@
   border-left-color: #b83c32;
 }
 
+.message.warning {
+  border-left-color: #c06a00;
+  background: #fff5e8;
+}
+
+.low-stock-alert {
+  font-weight: 600;
+}
+
 .register-form {
   margin-bottom: 1.25rem;
 }
@@ -69,6 +78,10 @@
 
 .low-stock {
   color: #b83c32;
+}
+
+.low-stock-row td {
+  background: #fff1f0;
 }
 
 @media (max-width: 768px) {

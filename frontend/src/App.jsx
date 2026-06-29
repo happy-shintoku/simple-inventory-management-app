@@ -1,7 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+function resolveApiBaseUrl() {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL
+  }
+
+  if (typeof window !== 'undefined') {
+    const { protocol, host } = window.location
+    const codespacesHost = host.replace(/-\d+\.app\.github\.dev$/, '-8000.app.github.dev')
+    if (codespacesHost !== host) {
+      return `${protocol}//${codespacesHost}`
+    }
+  }
+
+  return 'http://127.0.0.1:8000'
+}
+
+const API_BASE_URL = resolveApiBaseUrl()
 
 const initialForm = {
   name: '',
@@ -23,6 +39,11 @@ function App() {
 
   const totalStock = useMemo(
     () => products.reduce((sum, product) => sum + product.stock_quantity, 0),
+    [products],
+  )
+
+  const lowStockProducts = useMemo(
+    () => products.filter((product) => product.stock_quantity <= product.threshold),
     [products],
   )
 
@@ -173,6 +194,12 @@ function App() {
         </p>
       </header>
 
+      {lowStockProducts.length > 0 ? (
+        <article className="message warning low-stock-alert">
+          ⚠️ 在庫が不足している商品が {lowStockProducts.length} 件あります
+        </article>
+      ) : null}
+
       {message ? <article className="message success">{message}</article> : null}
       {error ? <article className="message error">{error}</article> : null}
 
@@ -281,7 +308,7 @@ function App() {
                 {products.map((product) => {
                   const isLowStock = product.stock_quantity <= product.threshold
                   return (
-                    <tr key={product.id}>
+                    <tr key={product.id} className={isLowStock ? 'low-stock-row' : ''}>
                       <td>{product.name}</td>
                       <td>{product.category}</td>
                       <td>{product.price.toLocaleString()} 円</td>
